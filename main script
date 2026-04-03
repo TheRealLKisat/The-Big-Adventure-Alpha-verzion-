@@ -1,0 +1,1166 @@
+#===========================================================
+# THE BIG ADVENTURE - RPG GAME (Enhanced Version)
+# A text-based RPG with Inventory, Shop, and More Content
+#===========================================================
+
+import tkinter as tk
+from tkinter import scrolledtext, messagebox, simpledialog, ttk
+import random, json, os, sys
+
+
+class Menu:
+    """===========================================================
+    MAIN GAME CLASS - Contains all game functionality
+    ============================================================"""
+    
+    def __init__(self):
+        """Initialize the game."""
+        
+        # ---- Window Setup ----
+        self.root = tk.Tk()
+        self.root.title("The Big Adventure - Enhanced")
+        self.root.geometry("900x600")
+        self.root.configure(bg="#1a1a2e")
+        
+        # ---- Game Variables ----
+        self.game = None
+        self.text_buffer = []
+        
+        # ---- Create GUI ----
+        self._create_gui_layout()
+        
+        # ===========================================================
+        # GAME DATA - All content (NPCs, Items, Locations, etc.)
+        # ===========================================================
+        
+        # ---- Items Database ----
+        # Format: "key": (name, type, power_bonus, defense_bonus, price, description)
+        self.ITEMS = {
+            # Weapons
+            "sword": ("Iron Sword", "weapon", 5, 0, 50, "A basic iron sword"),
+            "axe": ("Battle Axe", "weapon", 8, 0, 80, "A powerful battle axe"),
+            "bow": ("Elven Bow", "weapon", 6, 0, 70, "A precise bow from the elves"),
+            "staff": ("Magic Staff", "weapon", 10, 0, 120, "A staff imbued with magic"),
+            "dagger": ("Shadow Dagger", "weapon", 4, 0, 40, "A quick strike dagger"),
+            
+            # Armor
+            "leather": ("Leather Armor", "armor", 0, 3, 40, "Light leather protection"),
+            "chainmail": ("Chainmail", "armor", 0, 6, 80, "Standard chain armor"),
+            "plate": ("Plate Armor", "armor", 0, 10, 150, "Heavy plate armor"),
+            "robe": ("Mage Robe", "armor", 2, 4, 100, "Enchanted mage robes"),
+            
+            # Potions
+            "health_potion": ("Health Potion", "potion", 0, 0, 20, "Restores 30 HP"),
+            "mana_potion": ("Mana Potion", "potion", 0, 0, 25, "Restores 20 MP"),
+            "antidote": ("Antidote", "potion", 0, 0, 15, "Cures poison"),
+            
+            # Accessories
+            "ring_power": ("Ring of Power", "accessory", 3, 0, 100, "+3 Power"),
+            "ring_defense": ("Ring of Defense", "accessory", 0, 3, 100, "+3 Defense"),
+            "amulet_luck": ("Amulet of Luck", "accessory", 1, 1, 150, "+1 Power, +1 Defense"),
+        }
+        
+        # ---- Enemies Database ----
+        # Format: "key": (name, power, health, defense, xp_reward, gold_reward)
+        self.ENEMIES = {
+            "goblin": ("Goblin", 5, 30, 2, 10, 5),
+            "wolf": ("Wolf", 8, 40, 3, 15, 8),
+            "skeleton": ("Skeleton", 10, 45, 4, 20, 10),
+            "orc": ("Orc", 15, 60, 6, 30, 15),
+            "ogre": ("Ogre", 20, 80, 8, 40, 20),
+            "dark_knight": ("Dark Knight", 25, 100, 10, 50, 30),
+            "dragon": ("Dragon", 40, 150, 15, 100, 50),
+        }
+        
+        # ---- NPCs ----
+        self.NPCS = {
+            "military": (
+                "Captain Marcus", "Village Military Leader", "Greetings, adventurer!",
+                [("Train at the village", "Practice combat", 20, 5), ("Defend the village", "Help defend", 30, 10)]
+            ),
+            "blacksmith": (
+                "John the Blacksmith", "Village Blacksmith", "Need a weapon?",
+                [("Craft weapon", "Help craft", 15, 10), ("Buy materials", "Shop", 10, 5)]
+            ),
+            "healer": (
+                "Sister Mary", "Village Healer", "Need some healing?",
+                [("Help the sick", "Heal the ill", 15, 10), ("Gather herbs", "Find herbs", 10, 5)]
+            ),
+            "merchant": (
+                "Trader Joe", "Wandering Merchant", "Buy or sell, traveler!",
+                [("Help with trade", "Assist with trading", 20, 15)]
+            ),
+            "elder": (
+                "Village Elder", "Wisest in Village", "Seek knowledge, young one.",
+                [("Complete quests", "Help the village", 25, 20)]
+            ),
+        }
+        
+        # ---- Locations ----
+        self.LOCATIONS = {
+            "village": ("Village", "A peaceful village with shops and people", [], 0),
+            "forest": ("Dark Forest", "A dark and mysterious forest", ["goblin", "wolf"], 2),
+            "cave": ("Goblin Cave", "A cave filled with goblins", ["goblin", "orc"], 3),
+            "tower": ("Magic Tower", "An ancient tower of magic", ["skeleton", "dark_knight"], 4),
+            "mountain": ("Dragon's Mountain", "Home of the ancient dragon", ["orc", "ogre", "dragon"], 5),
+            "swamp": ("Poison Swamp", "A dangerous swamp", ["wolf", "ogre"], 3),
+            "ruins": ("Ancient Ruins", "Ruins of an old civilization", ["skeleton", "dark_knight"], 4),
+        }
+        
+        # ---- Guilds ----
+        self.GUILDS = {
+            "warriors": ("Warriors Guild", "Master Chen", [("Slay goblins", 30, 20), ("Slay orcs", 40, 30)]),
+            "mages": ("Mages Guild", "Archmage Zara", [("Find a staff", 35, 25), ("Study magic", 25, 20)]),
+            "merchants": ("Merchants Guild", "Guildmaster Gold", [("Trade goods", 20, 30), ("Make a deal", 30, 40)]),
+        }
+        
+        # ---- Create Main Menu ----
+        self._create_main_menu()
+        
+        # ---- Start Game ----
+        self.root.mainloop()
+    
+    
+    #=================================================================
+    # GUI LAYOUT
+    #=================================================================
+    
+    def _create_gui_layout(self):
+        """Create the two-panel layout."""
+        self.main_container = tk.PanedWindow(self.root, orient="horizontal", bg="#1a1a2e", sashwidth=5)
+        self.main_container.pack(fill="both", expand=True)
+        
+        # Left: Text display
+        self.text_frame = tk.Frame(self.main_container, bg="#1a1a2e")
+        self.main_container.add(self.text_frame, width=360)
+        
+        self.game_text = scrolledtext.ScrolledText(
+            self.text_frame, width=40, height=25,
+            font=("Consolas", 11), bg="#1e1e1e", fg="#00ff00", insertbackground="#00ff00"
+        )
+        self.game_text.pack(fill="both", expand=True, padx=10, pady=10)
+        self.game_text.config(state="disabled")
+        
+        # Right: Buttons
+        self.button_frame = tk.Frame(self.main_container, bg="#1a1a2e")
+        self.main_container.add(self.button_frame, width=540)
+    
+    
+    def gui_print(self, text=""):
+        """Display text in the game area."""
+        self.text_buffer.append(str(text))
+        self.game_text.config(state="normal")
+        self.game_text.delete("1.0", "end")
+        self.game_text.insert("end", "\n".join(self.text_buffer) + "\n")
+        self.game_text.see("end")
+        self.game_text.config(state="disabled")
+        self.root.update()
+    
+    
+    def clear_buffer(self):
+        """Clear text buffer."""
+        self.text_buffer.clear()
+    
+    
+    def show_inline_buttons(self, title, choices, callback):
+        """Create menu buttons."""
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        
+        tk.Label(self.button_frame, text=title, font=("Arial", 18, "bold"),
+                 bg="#1a1a2e", fg="#ffd700").pack(pady=20)
+        
+        btn_container = tk.Frame(self.button_frame, bg="#1a1a2e")
+        btn_container.pack(pady=10)
+        
+        for i, (btn_text, btn_value) in enumerate(choices):
+            btn = tk.Button(btn_container, text=btn_text, font=("Arial", 14),
+                            bg="#4a4a6a", fg="#ffffff", width=18, height=2,
+                            command=lambda v=btn_value: self._hide_inline_buttons(v, callback))
+            row = i // 2
+            col = i % 2
+            btn.grid(row=row, column=col, padx=10, pady=10)
+        
+        tk.Button(self.button_frame, text="⬅️ Back", font=("Arial", 12),
+                  bg="#6a4a4a", fg="#ffffff",
+                  command=lambda: self._hide_inline_buttons("back", callback)).pack(pady=20)
+        
+        self.root.update()
+        self.root.update_idletasks()
+        # Ensure window can receive keyboard input
+        self.root.focus_force()
+    
+    
+    def _hide_inline_buttons(self, choice, callback):
+        """Handle button click."""
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        
+        # Call callback with the choice value
+        # If choice is "back", pass it as is so handler can decide what to do
+        if choice is not None:
+            callback(choice)
+        self.root.update()
+    
+    
+    #=================================================================
+    # INNER CLASSES
+    #=================================================================
+    
+    class Player:
+        """Player character with stats and inventory."""
+        def __init__(self, name, race):
+            self.name = name
+            self.race = race
+            
+            stats = {
+                "Human": (10, 100, 5, 1, 5),
+                "Ork": (20, 200, 10, 1, 2.5),
+                "Elf": (5, 50, 2.5, 1, 10),
+                "Dwarf": (15, 150, 8, 2, 3),
+            }
+            p, hp, d, l, s = stats.get(race, (10, 100, 5, 1, 5))
+            
+            self.power = p
+            self.health = hp
+            self.maxHP = hp
+            self.defense = d
+            self.luck = l
+            self.speed = s
+            self.level = 1
+            self.xp = 0
+            self.max_xp = 100
+            self.gold = 100
+            self.mp = 50
+            self.maxMP = 50
+            
+            # Inventory: list of item keys
+            self.inventory = []
+            # Equipped items: {"weapon": item_key, "armor": item_key, etc.}
+            self.equipped = {"weapon": None, "armor": None, "accessory1": None, "accessory2": None}
+    
+    
+    class GameState:
+        """Game world state."""
+        def __init__(self, npc_keys):
+            self.day = 1
+            self.hour = 8
+            self.visited_locations = set()
+            self.npc_completed = {k: [] for k in npc_keys}
+            self.reputation = {}
+            self.guilds = {}
+            self.equipment = {}
+        
+        def get_time_period(self):
+            if 6 <= self.hour < 12: return "Morning"
+            elif 12 <= self.hour < 18: return "Afternoon"
+            elif 18 <= self.hour < 22: return "Evening"
+            else: return "Night"
+        
+        def advance_time(self, hours):
+            self.hour += hours
+            while self.hour >= 24:
+                self.hour -= 24
+                self.day += 1
+    
+    
+    class Game:
+        """Main game controller."""
+        def __init__(self, npc_keys, parent=None):
+            self.player = None
+            self.state = Menu.GameState(npc_keys)
+            self.enemy = None
+            self.parent = parent  # Reference to Menu class for accessing data
+        
+        def create_player(self, name, race):
+            self.player = Menu.Player(name, race)
+        
+        def get_player_power(self):
+            """Calculate total power including equipment."""
+            power = self.player.power
+            for slot, item_key in self.player.equipped.items():
+                if item_key:
+                    # Get power bonus from item
+                    power += 2  # Base bonus
+            return power
+        
+        def get_player_defense(self):
+            """Calculate total defense including equipment."""
+            defense = self.player.defense
+            for slot, item_key in self.player.equipped.items():
+                if item_key:
+                    defense += 2  # Base bonus
+            return defense
+        
+        def gain_xp(self, amount, gui_print_func):
+            self.player.xp += amount
+            while self.player.xp >= self.player.max_xp:
+                self.player.xp -= self.player.max_xp
+                self.player.level += 1
+                self.player.max_xp = int(self.player.max_xp * 1.5)
+                self.player.power += 5
+                self.player.maxHP += 20
+                self.player.maxMP += 10
+                gui_print_func(f"🎉 Level up! Now level {self.player.level}!")
+        
+        def create_enemy(self):
+            """Create a random enemy with random stats."""
+            enemies = list(self.parent.ENEMIES.keys())
+            e = random.choice(enemies)
+            data = self.parent.ENEMIES[e]
+            self.enemy = type('Enemy', (), {
+                "key": e,
+                "race": data[0],
+                "power": data[1],
+                "health": data[2],
+                "defense": data[3],
+                "xp_reward": data[4],
+                "gold_reward": data[5]
+            })()
+        
+        def fight(self, gui_print_func, show_buttons_func, root_update, items_db, callback=None):
+            """Start a combat encounter."""
+            gui_print_func(f"⚔️ FIGHT! Enemy: {self.enemy.race}")
+            gui_print_func(f"Your HP: {self.player.health}/{self.player.maxHP} | MP: {self.player.mp}/{self.player.maxMP}")
+            gui_print_func(f"Enemy HP: {self.enemy.health}")
+            root_update()
+            
+            # Show combat buttons
+            show_buttons_func("Combat", [
+                ("⚔️ Attack", "1"),
+                ("🛡️ Defend", "2"),
+                ("💫 Special", "3"),
+                ("🏃 Run", "4")
+            ], callback if callback else lambda c: None)
+        
+        def _handle_combat(self, c, gui_print_func, show_buttons_func, root_update, items_db):
+            if c == "1":  # Attack
+                player_power = self.get_player_power()
+                dmg = max(1, player_power - self.enemy.defense + random.randint(-3, 3))
+                self.enemy.health -= dmg
+                gui_print_func(f"You deal {dmg} damage to {self.enemy.race}!")
+            elif c == "2":  # Defend
+                dmg = max(0, self.enemy.power - self.get_player_defense())
+                self.player.health -= dmg
+                gui_print_func(f"Defended! Took {dmg} damage.")
+            elif c == "3":  # Special (costs MP)
+                if self.player.mp >= 10:
+                    self.player.mp -= 10
+                    player_power = self.get_player_power()
+                    dmg = max(1, player_power * 2 - self.enemy.defense)
+                    self.enemy.health -= dmg
+                    gui_print_func(f"🔥 Special attack! {dmg} damage!")
+                else:
+                    gui_print_func("Not enough MP! Need 10 MP for special.")
+                    return "continue"
+            elif c == "4":  # Run
+                if random.random() < 0.5:
+                    gui_print_func("Escaped!")
+                    return "escaped"
+                else:
+                    gui_print_func("Failed to escape!")
+            
+            if self.enemy.health <= 0:
+                gui_print_func(f"🎉 Victory! +{self.enemy.xp_reward}XP +{self.enemy.gold_reward}gold")
+                self.gain_xp(self.enemy.xp_reward, gui_print_func)
+                self.player.gold += self.enemy.gold_reward
+                return "victory"
+            
+            # Enemy attacks
+            dmg = max(0, self.enemy.power - self.get_player_defense())
+            self.player.health -= dmg
+            gui_print_func(f"{self.enemy.race} deals {dmg} damage!")
+            
+            if self.player.health <= 0:
+                gui_print_func("💀 You died! Game over.")
+                self.player.health = self.player.maxHP
+                self.player.mp = self.player.maxMP
+                return "died"
+            
+            return "continue"
+
+
+    #=================================================================
+    # GAMEPLAY METHODS
+    #=================================================================
+    
+    def start_new_game(self):
+        """Start new game with race selection."""
+        self.game = Menu.Game(list(self.NPCS.keys()), self)
+        
+        # Race selection
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        
+        tk.Label(self.button_frame, text="Choose Your Race", font=("Arial", 24, "bold"),
+                 bg="#1a1a2e", fg="#ffd700").pack(pady=20)
+        
+        races = [
+            ("Human (Balanced)", "Human"),
+            ("Ork (Strong)", "Ork"),
+            ("Elf (Fast)", "Elf"),
+            ("Dwarf (Tough)", "Dwarf"),
+        ]
+        
+        for text, race in races:
+            tk.Button(self.button_frame, text=text, font=("Arial", 14),
+                      bg="#4a4a6a", fg="#ffffff", width=20, height=2,
+                      command=lambda r=race: self._create_character(r)).pack(pady=5)
+    
+    def _create_character(self, race):
+        """Create character with selected race."""
+        self.game.create_player("Hero", race)
+        
+        # Give starting items
+        self.game.player.inventory = ["sword", "health_potion"]
+        self.game.player.equipped["weapon"] = "sword"
+        
+        for widget in self.button_frame.winfo_children():
+            widget.destroy()
+        
+        self.gui_print(f"Welcome to The Big Adventure!")
+        self.gui_print(f"You are a {race} adventurer!")
+        self.gui_print("You received: Iron Sword, Health Potion")
+        self.game_loop()
+    
+    
+    def game_loop(self):
+        """Main game loop."""
+        time_period = self.game.state.get_time_period()
+        
+        # Calculate stats with equipment
+        power = self.game.get_player_power()
+        defense = self.game.get_player_defense()
+        
+        self.gui_print(f"\n⏰ Day {self.game.state.day}, {self.game.state.hour}:00 ({time_period})")
+        self.gui_print(f"💰{self.game.player.gold}g | ❤️{self.game.player.health}/{self.game.player.maxHP} | 💎{self.game.player.mp}/{self.game.player.maxMP}")
+        self.gui_print(f"⚔️ Power: {power} | 🛡️ Defense: {defense} | 📦 Items: {len(self.game.player.inventory)}")
+        
+        if time_period == "night":
+            self.gui_print("🌙 Night time. Some shops may be closed.")
+        
+        self.show_inline_buttons("Main Menu", [
+            ("📜 Quests", "1"),
+            ("👤 NPCs", "2"),
+            ("🗺️ Explore", "3"),
+            ("🏛️ Guild", "4"),
+            ("🎒 Inventory", "5"),
+            ("🏪 Shop", "6"),
+            ("😴 Rest", "7"),
+            ("📊 Stats", "8"),
+            ("💾 Save", "save"),
+            ("❌ Quit", "quit")
+        ], lambda c: self.handle_menu_choice(c))
+        self.root.update()
+    
+    
+    def handle_menu_choice(self, c):
+        """Handle main menu selection."""
+        if c == "back":
+            # Back button - return to game loop
+            self.game_loop()
+        elif c == "1":  # Quests
+            self.show_inline_buttons("Quests", [
+                ("📝 Daily Quest", "1"),
+                ("📖 Story Quest", "2"),
+                ("🏆 Achievements", "3"),
+                ("⬅️ Back", "back")
+            ], lambda sub: self.handle_quest_choice(sub))
+        elif c == "2":  # NPCs
+            self.gui_print("\n👤 NPCs:")
+            for k, v in self.NPCS.items():
+                self.gui_print(f"  {k.title()}: {v[0]} - {v[1]}")
+            npc_choices = [(f"{v[0]}", k) for k, v in self.NPCS.items()]
+            npc_choices.append(("⬅️ Back", "back"))
+            self.show_inline_buttons("Select NPC", npc_choices, lambda npc: self.handle_npc_select(npc))
+        elif c == "3":  # Explore
+            self.gui_print("\n🗺️ Locations:")
+            for k, v in self.LOCATIONS.items():
+                danger = "★" * v[3]
+                self.gui_print(f"  {v[0]}: {v[1][:30]}... Danger: {danger}")
+            loc_choices = [(f"{v[0]}", k) for k, v in self.LOCATIONS.items()]
+            loc_choices.append(("⬅️ Back", "back"))
+            self.show_inline_buttons("Select Location", loc_choices, lambda loc: self.handle_explore(loc))
+        elif c == "4":  # Guild
+            self.guild_menu()
+        elif c == "5":  # Inventory
+            self.inventory_menu()
+        elif c == "6":  # Shop
+            self.shop_menu()
+        elif c == "7":  # Rest
+            heal = random.randint(30, 50)
+            mp_restore = random.randint(10, 20)
+            self.game.player.health = min(self.game.player.health + heal, self.game.player.maxHP)
+            self.game.player.mp = min(self.game.player.mp + mp_restore, self.game.player.maxMP)
+            self.game.state.advance_time(6)
+            self.gui_print(f"😴 You rested well. Healed {heal} HP and restored {mp_restore} MP.")
+            self.root.after(100, lambda: self.game_loop())
+        elif c == "8":  # Stats
+            power = self.game.get_player_power()
+            defense = self.game.get_player_defense()
+            messagebox.showinfo("Player Stats",
+                f"Name: {self.game.player.name}\nRace: {self.game.player.race}\nLevel: {self.game.player.level}\n\n"
+                f"❤️ HP: {self.game.player.health}/{self.game.player.maxHP}\n"
+                f"💎 MP: {self.game.player.mp}/{self.game.player.maxMP}\n"
+                f"⚔️ Power: {self.game.player.power} (+{power - self.game.player.power} from gear)\n"
+                f"🛡️ Defense: {self.game.player.defense} (+{defense - self.game.player.defense} from gear)\n"
+                f"🍀 Luck: {self.game.player.luck}\n"
+                f"💨 Speed: {self.game.player.speed}\n\n"
+                f"📊 XP: {self.game.player.xp}/{self.game.player.max_xp}\n"
+                f"💰 Gold: {self.game.player.gold}\n"
+                f"📦 Inventory: {len(self.game.player.inventory)} items")
+            self.root.after(100, lambda: self.game_loop())
+        elif c == "save":
+            self.save_game()
+            self.root.after(100, lambda: self.game_loop())
+        elif c == "quit":
+            response = messagebox.askyesno("Quit Game", "Would you like to save before quitting?")
+            if response:
+                self.save_game()
+            self.root.destroy()
+    
+    
+    # ---- Inventory ----
+    
+    def inventory_menu(self):
+        """Show inventory menu."""
+        self.gui_print("\n🎒 INVENTORY")
+        
+        player = self.game.player
+        items = []
+        
+        # Show inventory items
+        if player.inventory:
+            for item_key in player.inventory:
+                if item_key in self.ITEMS:
+                    item = self.ITEMS[item_key]
+                    items.append(f"{item[0]} ({item[1]})")
+        
+        if items:
+            self.gui_print("Your items:")
+            for item in items:
+                self.gui_print(f"  - {item}")
+        else:
+            self.gui_print("Your inventory is empty!")
+        
+        # Show equipped items
+        self.gui_print("\n⚔️ EQUIPPED:")
+        for slot, item_key in player.equipped.items():
+            if item_key and item_key in self.ITEMS:
+                item = self.ITEMS[item_key]
+                self.gui_print(f"  {slot}: {item[0]}")
+            else:
+                self.gui_print(f"  {slot}: Empty")
+        
+        self.show_inline_buttons("Inventory", [
+            ("⚔️ Equip Item", "1"),
+            ("📋 Use Potion", "2"),
+            ("⬅️ Back", "back")
+        ], lambda c: self.handle_inventory_choice(c))
+    
+    def handle_inventory_choice(self, c):
+        """Handle inventory menu choices."""
+        if c == "back":
+            self.game_loop()
+        elif c == "1":  # Equip
+            self._show_equip_menu()
+        elif c == "2":  # Use potion
+            self._show_use_potion_menu()
+    
+    def _show_equip_menu(self):
+        """Show items that can be equipped."""
+        player = self.game.player
+        
+        # Get equippable items
+        equippable = [item for item in player.inventory if item in self.ITEMS and self.ITEMS[item][1] in ["weapon", "armor", "accessory"]]
+        
+        if not equippable:
+            self.gui_print("No equippable items!")
+            self.root.after(100, lambda: self.inventory_menu())
+            return
+        
+        self.gui_print("\nSelect item to equip:")
+        choices = []
+        for item_key in equippable:
+            item = self.ITEMS[item_key]
+            choices.append((f"{item[0]} ({item[1]})", item_key))
+        choices.append(("⬅️ Back", "back"))
+        
+        self.show_inline_buttons("Equip", choices, lambda item: self._equip_item(item))
+    
+    def _equip_item(self, item_key):
+        """Equip an item."""
+        if item_key == "back" or item_key is None:
+            self.inventory_menu()
+            return
+        
+        if item_key not in self.ITEMS:
+            return
+        
+        item = self.ITEMS[item_key]
+        item_type = item[1]
+        
+        # Find the right slot
+        if item_type == "weapon":
+            slot = "weapon"
+        elif item_type == "armor":
+            slot = "armor"
+        elif item_type == "accessory":
+            slot = "accessory1" if not self.game.player.equipped["accessory1"] else "accessory2"
+        else:
+            self.gui_print("Cannot equip this item!")
+            self._show_equip_menu()
+            return
+        
+        # Unequip old item if any
+        old_item = self.game.player.equipped[slot]
+        if old_item:
+            self.game.player.inventory.append(old_item)
+        
+        # Equip new item
+        self.game.player.equipped[slot] = item_key
+        self.game.player.inventory.remove(item_key)
+        
+        self.gui_print(f"✅ Equipped: {item[0]}")
+        self.root.after(100, lambda: self.inventory_menu())
+    
+    def _show_use_potion_menu(self):
+        """Show potions that can be used."""
+        player = self.game.player
+        
+        # Get potions
+        potions = [item for item in player.inventory if item in self.ITEMS and self.ITEMS[item][1] == "potion"]
+        
+        if not potions:
+            self.gui_print("No potions in inventory!")
+            self.root.after(100, lambda: self.inventory_menu())
+            return
+        
+        self.gui_print("\nSelect potion to use:")
+        choices = []
+        for item_key in potions:
+            item = self.ITEMS[item_key]
+            choices.append((f"{item[0]}", item_key))
+        choices.append(("⬅️ Back", "back"))
+        
+        self.show_inline_buttons("Use Potion", choices, lambda item: self._use_potion(item))
+    
+    def _use_potion(self, item_key):
+        """Use a potion."""
+        if item_key == "back" or item_key is None:
+            self.inventory_menu()
+            return
+        
+        if item_key not in self.ITEMS:
+            return
+        
+        item = self.ITEMS[item_key]
+        player = self.game.player
+        
+        if "health" in item_key.lower():
+            heal = 30
+            player.health = min(player.health + heal, player.maxHP)
+            self.gui_print(f"💚 Used {item[0]}! Healed {heal} HP.")
+        elif "mana" in item_key.lower():
+            restore = 20
+            player.mp = min(player.mp + restore, player.maxMP)
+            self.gui_print(f"💎 Used {item[0]}! Restored {restore} MP.")
+        elif "antidote" in item_key.lower():
+            self.gui_print(f"🧪 Used {item[0]}! Poison cured.")
+        
+        # Remove used potion
+        player.inventory.remove(item_key)
+        self.root.after(100, lambda: self.inventory_menu())
+    
+    
+    # ---- Shop ----
+    
+    def shop_menu(self):
+        """Show shop menu."""
+        self.gui_print("\n🏪 SHOP")
+        self.gui_print(f"Your gold: {self.game.player.gold}g")
+        
+        self.gui_print("\nItems for sale:")
+        for key, item in self.ITEMS.items():
+            self.gui_print(f"  {item[0]} - {item[5]} | Price: {item[4]}g")
+        
+        self.show_inline_buttons("Shop", [
+            ("💰 Buy Items", "1"),
+            ("💵 Sell Items", "2"),
+            ("⬅️ Back", "back")
+        ], lambda c: self.handle_shop_choice(c))
+    
+    def handle_shop_choice(self, c):
+        """Handle shop menu."""
+        if c == "back":
+            self.game_loop()
+        elif c == "1":  # Buy
+            self._show_buy_menu()
+        elif c == "2":  # Sell
+            self._show_sell_menu()
+    
+    def _show_buy_menu(self):
+        """Show items to buy."""
+        self.gui_print("\n💰 BUY ITEMS")
+        self.gui_print(f"Your gold: {self.game.player.gold}g")
+        
+        choices = []
+        for key, item in self.ITEMS.items():
+            choices.append((f"{item[0]} ({item[4]}g)", key))
+        choices.append(("⬅️ Back", "back"))
+        
+        self.show_inline_buttons("Buy", choices, lambda item: self._buy_item(item))
+    
+    def _buy_item(self, item_key):
+        """Buy an item."""
+        if item_key == "back" or item_key is None:
+            self.shop_menu()
+            return
+        
+        if item_key not in self.ITEMS:
+            return
+        
+        item = self.ITEMS[item_key]
+        price = item[4]
+        
+        if self.game.player.gold >= price:
+            self.game.player.gold -= price
+            self.game.player.inventory.append(item_key)
+            self.gui_print(f"✅ Bought {item[0]} for {price}g!")
+        else:
+            self.gui_print(f"❌ Not enough gold! Need {price}g, have {self.game.player.gold}g.")
+        
+        self.root.after(100, lambda: self._show_buy_menu())
+    
+    def _show_sell_menu(self):
+        """Show items to sell."""
+        player = self.game.player
+        
+        if not player.inventory:
+            self.gui_print("No items to sell!")
+            self.root.after(100, lambda: self.shop_menu())
+            return
+        
+        self.gui_print("\n💵 SELL ITEMS")
+        self.gui_print(f"Your gold: {player.gold}g")
+        
+        choices = []
+        for item_key in player.inventory:
+            if item_key in self.ITEMS:
+                item = self.ITEMS[item_key]
+                sell_price = item[4] // 2  # Sell for half price
+                choices.append((f"{item[0]} ({sell_price}g)", item_key))
+        
+        choices.append(("⬅️ Back", "back"))
+        
+        self.show_inline_buttons("Sell", choices, lambda item: self._sell_item(item))
+    
+    def _sell_item(self, item_key):
+        """Sell an item."""
+        if item_key == "back" or item_key is None:
+            self.shop_menu()
+            return
+        
+        if item_key not in self.ITEMS:
+            return
+        
+        item = self.ITEMS[item_key]
+        sell_price = item[4] // 2
+        
+        self.game.player.gold += sell_price
+        self.game.player.inventory.remove(item_key)
+        
+        self.gui_print(f"✅ Sold {item[0]} for {sell_price}g!")
+        self.root.after(100, lambda: self._show_sell_menu())
+    
+    
+    # ---- Other Methods ----
+    
+    def handle_quest_choice(self, sub):
+        """Handle quest submenu choices."""
+        if sub == "back":
+            self.game_loop()
+        elif sub == "1":
+            self.game_loop()
+        elif sub == "1":  # Daily
+            tasks = ["Explore forest", "Explore cave", "Explore tower", "Fight in ruins", "Visit swamp"]
+            task = random.choice(tasks)
+            self.gui_print(f"📝 Daily Quest: {task}")
+            loc_key = task.split()[-1].lower()
+            if loc_key in self.LOCATIONS:
+                self.explore(loc_key)
+            else:
+                self.game.gain_xp(25, self.gui_print)
+                self.gui_print("Quest completed! +25XP")
+                self.root.after(100, lambda: self.game_loop())
+        elif sub == "2":  # Story
+            self.gui_print("📖 Story Quest: Defeat the Dragon!")
+            self.gui_print("The ancient dragon terrorizes the land...")
+            self.gui_print("Location: Dragon's Mountain")
+            self.show_inline_buttons("Story Quest", [
+                ("🗺️ Go to Mountain", "1"),
+                ("⬅️ Back", "back")
+            ], lambda c: self._handle_story_quest(c))
+        elif sub == "3":  # Achievements
+            self.gui_print("🏆 Achievements:")
+            self.gui_print("  - Reach Level 5")
+            self.gui_print("  - Collect 10 items")
+            self.gui_print("  - Defeat the Dragon")
+            self.gui_print("  - Join all guilds")
+            self.root.after(100, lambda: self.game_loop())
+    
+    def _handle_story_quest(self, c):
+        if c == "1":
+            self.explore("mountain")
+        else:
+            self.game_loop()
+    
+    def handle_npc_select(self, npc):
+        if npc and npc != "back":
+            self.npc_menu(npc)
+        elif npc == "back":
+            self.game_loop()
+    
+    def npc_menu(self, key):
+        name, role, greet, tasks = self.NPCS[key]
+        self.gui_print(f"\n👤 {name} - {role}")
+        self.gui_print(f"'{greet}'")
+        
+        self.show_inline_buttons(f"NPC: {name}", [
+            ("📋 Get Task", "1"),
+            ("✅ Completed", "2"),
+            ("💬 Talk", "3"),
+            ("⬅️ Exit", "4")
+        ], lambda c: self.handle_npc_choice(key, c, tasks))
+    
+    def handle_npc_choice(self, key, c, tasks):
+        """Handle NPC menu selection."""
+        if c == "back":
+            # Go back to NPC selection
+            self.handle_npc_select(key)
+        elif c == "4":
+            # Exit - go back to main menu
+            self.game_loop()
+        elif c == "1":
+            # Get Task - show available tasks
+            available = [t for t in tasks if t[0] not in self.game.state.npc_completed[key]]
+            if not available:
+                self.gui_print("All tasks done!")
+                self.game_loop()
+                return
+            self.gui_print("Available tasks:")
+            for i, t in enumerate(available):
+                self.gui_print(f"{i+1}. {t[0]} - {t[1]} (XP:{t[2]} Gold:{t[3]})")
+            
+            task_choices = []
+            for i, t in enumerate(available):
+                task_choices.append((f"{t[0]}", i))
+            task_choices.append(("⬅️ Back", "back"))
+            
+            self.root.update()
+            self.show_inline_buttons("Select Task", task_choices,
+                                   lambda x: self.handle_task_selection(key, x, available))
+        elif c == "2":
+            self.gui_print(f"Completed: {self.game.state.npc_completed[key]}")
+            self.root.after(100, lambda: self.game_loop())
+        elif c == "3":
+            name = self.NPCS[key][0]
+            self.gui_print(f"{name}: 'Thanks for your help, adventurer!'")
+            self.root.after(100, lambda: self.game_loop())
+    
+    def handle_task_selection(self, key, choice, available_tasks):
+        if choice == "back" or choice is None:
+            self.npc_menu(key)
+        elif isinstance(choice, int) and 0 <= choice < len(available_tasks):
+            task = available_tasks[choice]
+            self.gui_print(f"📋 Accepted: {task[0]}")
+            self.gui_print(f"Goal: {task[1]}")
+            self.game.state.npc_completed[key].append(task[0])
+            self.root.after(100, lambda: self.start_npc_task(key, task))
+    
+    def start_npc_task(self, key, task):
+        task_name = task[0]
+        
+        if "Train" in task_name or "Practice" in task_name:
+            self.game.gain_xp(task[2], self.gui_print)
+            self.game.player.gold += task[3]
+            self.gui_print(f"✅ Done! +{task[2]}XP +{task[3]}g")
+        elif "Defend" in task_name or "Help defend" in task_name:
+            self.game.create_enemy()
+            self._start_fight()
+        elif "Craft" in task_name or "Help craft" in task_name:
+            self.game.gain_xp(task[2], self.gui_print)
+            self.game.player.gold += task[3]
+            self.gui_print(f"✅ Done! +{task[2]}XP +{task[3]}g")
+        elif "Gather" in task_name or "Find" in task_name:
+            self.game.gain_xp(task[2], self.gui_print)
+            self.game.player.gold += task[3]
+            self.gui_print(f"✅ Done! +{task[2]}XP +{task[3]}g")
+        else:
+            self.game.gain_xp(task[2], self.gui_print)
+            self.game.player.gold += task[3]
+            self.gui_print(f"✅ Done! +{task[2]}XP +{task[3]}g")
+        
+        self.root.after(100, lambda: self.game_loop())
+    
+    def handle_explore(self, loc):
+        if loc and loc != "back":
+            self.explore(loc)
+        elif loc == "back":
+            self.game_loop()
+    
+    def explore(self, loc_key):
+        name, desc, enemies, danger = self.LOCATIONS[loc_key]
+        self.gui_print(f"\n📍 {name}")
+        self.gui_print(f"Description: {desc}")
+        self.gui_print(f"Danger Level: {'★'*danger}")
+        
+        self.game.state.visited_locations.add(loc_key)
+        self.game.state.advance_time(2)
+        
+        if enemies and random.random() < 0.5:  # 50% chance
+            self.game.create_enemy()
+            self._start_fight()
+        else:
+            self.game.gain_xp(random.randint(10, 25), self.gui_print)
+            self.gui_print("✅ Explored safely! Gained XP.")
+            self.root.update()
+            self.game_loop()
+    
+    def _start_fight(self):
+        """Start a combat encounter and ensure we return to game loop after."""
+        # Create a wrapper that handles combat results
+        def combat_callback(c):
+            result = self.game._handle_combat(c, self.gui_print, self.show_inline_buttons, self.root.update, self.ITEMS)
+            
+            # If combat ended, return to game loop
+            if result in ["victory", "escaped", "died"]:
+                self.root.after(100, lambda: self.game_loop())
+            else:
+                # Continue combat - show combat menu again
+                self.root.after(100, lambda: self._continue_combat())
+        
+        # Start the fight
+        self.game.fight(self.gui_print, self.show_inline_buttons, self.root.update, self.ITEMS, combat_callback)
+
+    def _continue_combat(self):
+        """Continue combat after a round."""
+        # Show the combat menu again
+        self.show_inline_buttons("Combat", [
+            ("⚔️ Attack", "1"),
+            ("🛡️ Defend", "2"),
+            ("💫 Special", "3"),
+            ("🏃 Run", "4")
+        ], lambda c: self._handle_combat_input(c))
+
+    def _handle_combat_input(self, c):
+        """Handle combat input and continue."""
+        result = self.game._handle_combat(c, self.gui_print, self.show_inline_buttons, self.root.update, self.ITEMS)
+        
+        if result in ["victory", "escaped", "died"]:
+            self.root.after(100, lambda: self.game_loop())
+        else:
+            self.root.after(100, lambda: self._continue_combat())
+    
+    def guild_menu(self):
+        self.gui_print("\n🏛️ GUILDS")
+        for k, v in self.GUILDS.items():
+            status = "✅ Joined" if k in self.game.state.guilds else "❌ Not joined"
+            self.gui_print(f"  {v[0]} ({v[1]}): {status}")
+        
+        self.show_inline_buttons("Guilds", [
+            ("➕ Join Guild", "1"),
+            ("📋 Guild Tasks", "2"),
+            ("⬅️ Exit", "3")
+        ], lambda c: self.handle_guild_choice(c))
+    
+    def handle_guild_choice(self, c):
+        """Handle guild menu selections."""
+        if c == "back":
+            # Go back to guild list
+            self.guild_menu()
+        elif c == "3":
+            # Exit - go back to main menu
+            self.game_loop()
+        elif c == "1":  # Join
+            self.game_loop()
+        elif c == "1":
+            self._show_join_guild()
+        elif c == "2":
+            self._show_guild_tasks()
+    
+    def _show_join_guild(self):
+        available = [k for k in self.GUILDS.keys() if k not in self.game.state.guilds]
+        
+        if not available:
+            self.gui_print("Already joined all guilds!")
+            self.root.after(100, lambda: self.guild_menu())
+            return
+        
+        self.gui_print("\nAvailable guilds to join:")
+        choices = []
+        for k in available:
+            v = self.GUILDS[k]
+            choices.append((f"{v[0]}", k))
+        choices.append(("⬅️ Back", "back"))
+        
+        self.show_inline_buttons("Join Guild", choices, lambda g: self._join_guild(g))
+    
+    def _join_guild(self, guild_key):
+        if guild_key == "back" or guild_key is None:
+            self.guild_menu()
+            return
+        
+        v = self.GUILDS[guild_key]
+        self.game.state.guilds[guild_key] = {"rank": "Novice", "completed": []}
+        self.gui_print(f"✅ Joined {v[0]}!")
+        self.root.after(100, lambda: self.guild_menu())
+    
+    def _show_guild_tasks(self):
+        if not self.game.state.guilds:
+            self.gui_print("Join a guild first!")
+            self.root.after(100, lambda: self.guild_menu())
+            return
+        
+        self.gui_print("\nYour Guild Tasks:")
+        for k in self.game.state.guilds.keys():
+            v = self.GUILDS[k]
+            self.gui_print(f"\n{v[0]}:")
+            for task in v[2]:
+                self.gui_print(f"  - {task[0]}: XP{task[1]}, Gold{task[2]}")
+        
+        self.root.after(100, lambda: self.guild_menu())
+    
+    
+    #=================================================================
+    # SAVE/LOAD
+    #=================================================================
+    
+    def get_save_path(self):
+        """Get the save file path in AppData (hidden from players)."""
+        appdata = os.environ.get('APPDATA', os.path.expanduser('~/.local/share'))
+        save_dir = os.path.join(appdata, 'TheBigAdventure')
+        os.makedirs(save_dir, exist_ok=True)
+        return os.path.join(save_dir, 'Player_save.json')
+    
+    def save_game(self):
+        """Save game to file."""
+        if self.game is None or self.game.player is None:
+            messagebox.showwarning("No Game", "No active game to save! Start a new game or load one first.")
+            return
+        
+        save_data = {
+            "player": {
+                "name": self.game.player.name,
+                "race": self.game.player.race,
+                "power": self.game.player.power,
+                "health": self.game.player.health,
+                "maxHP": self.game.player.maxHP,
+                "defense": self.game.player.defense,
+                "luck": self.game.player.luck,
+                "speed": self.game.player.speed,
+                "level": self.game.player.level,
+                "xp": self.game.player.xp,
+                "max_xp": self.game.player.max_xp,
+                "gold": self.game.player.gold,
+                "mp": self.game.player.mp,
+                "maxMP": self.game.player.maxMP,
+                "inventory": self.game.player.inventory,
+                "equipped": self.game.player.equipped,
+            },
+            "state": {
+                "day": self.game.state.day,
+                "hour": self.game.state.hour,
+                "visited_locations": list(self.game.state.visited_locations),
+                "npc_completed": self.game.state.npc_completed,
+                "reputation": self.game.state.reputation,
+                "guilds": self.game.state.guilds,
+            }
+        }
+        
+        try:
+            save_path = self.get_save_path()
+            with open(save_path, "w") as f:
+                json.dump(save_data, f, indent=2)
+            messagebox.showinfo("Save Game", "Game saved successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save: {e}")
+    
+    def load_game(self):
+        """Load game from file."""
+        save_path = self.get_save_path()
+        if not os.path.exists(save_path):
+            messagebox.showwarning("No Save", "No saved game found!")
+            return
+        
+        try:
+            with open(save_path, "r") as f:
+                save_data = json.load(f)
+            
+            self.game = Menu.Game(list(self.NPCS.keys()), self)
+            
+            p = save_data["player"]
+            self.game.player = Menu.Player(p["name"], p["race"])
+            self.game.player.power = p["power"]
+            self.game.player.health = p["health"]
+            self.game.player.maxHP = p["maxHP"]
+            self.game.player.defense = p["defense"]
+            self.game.player.luck = p["luck"]
+            self.game.player.speed = p["speed"]
+            self.game.player.level = p["level"]
+            self.game.player.xp = p["xp"]
+            self.game.player.max_xp = p["max_xp"]
+            self.game.player.gold = p["gold"]
+            self.game.player.mp = p.get("mp", 50)
+            self.game.player.maxMP = p.get("maxMP", 50)
+            self.game.player.inventory = p.get("inventory", [])
+            self.game.player.equipped = p.get("equipped", {"weapon": None, "armor": None, "accessory1": None, "accessory2": None})
+            
+            s = save_data["state"]
+            self.game.state.day = s["day"]
+            self.game.state.hour = s["hour"]
+            self.game.state.visited_locations = set(s.get("visited_locations", []))
+            self.game.state.npc_completed = s.get("npc_completed", {})
+            self.game.state.reputation = s.get("reputation", {})
+            self.game.state.guilds = s.get("guilds", {})
+            
+            for widget in self.button_frame.winfo_children():
+                widget.destroy()
+            
+            self.gui_print(f"✅ Game loaded! Welcome back, {self.game.player.name}!")
+            self.game_loop()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load: {e}")
+    
+    
+    #=================================================================
+    # MAIN MENU
+    #=================================================================
+    
+    def _create_main_menu(self):
+        """Create startup menu."""
+        tk.Label(self.button_frame, text="⚔️ THE BIG ADVENTURE ⚔️", font=("Arial", 24, "bold"),
+                bg="#1a1a2e", fg="#ffd700").pack(pady=30)
+        
+        tk.Label(self.button_frame, text="(Enhanced Version)", font=("Arial", 12),
+                bg="#1a1a2e", fg="#aaaaaa").pack(pady=5)
+        
+        menu_btn_frame = tk.Frame(self.button_frame, bg="#1a1a2e")
+        menu_btn_frame.pack(pady=20)
+        
+        def make_btn(text, cmd, color="#4a4a6a"):
+            return tk.Button(menu_btn_frame, text=text, command=cmd, font=("Arial", 14, "bold"),
+                             bg=color, fg="#ffffff", width=15, height=2)
+        
+        make_btn("🆕 NEW GAME", self.start_new_game, "#2d6a4f").pack(pady=10)
+        make_btn("💾 SAVE", self.save_game, "#2d6a4f").pack(pady=10)
+        make_btn("📂 LOAD", self.load_game, "#2d6a4f").pack(pady=10)
+        make_btn("❌ QUIT", self.root.destroy, "#6a2d2d").pack(pady=10)
+
+
+#===========================================================
+# START THE GAME
+#===========================================================
+if __name__ == "__main__":
+    Menu()
